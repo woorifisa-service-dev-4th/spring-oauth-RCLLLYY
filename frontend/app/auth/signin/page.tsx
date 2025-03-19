@@ -26,10 +26,19 @@ export default function SignIn() {
           </p>
           
           <button
-            onClick={() => signIn("oauth2", { callbackUrl })}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            onClick={() => {
+              console.log("Login attempt with oauth2 provider");
+              console.log("Using OAuth issuer:", process.env.NEXT_PUBLIC_OAUTH_ISSUER || "Not set");
+              signIn("oauth2", { 
+                redirect: true,
+                callbackUrl: window.location.origin 
+              }).catch(err => {
+                console.error("SignIn error:", err);
+              });
+            }}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
           >
-            OAuth2 로그인
+            로그인
           </button>
           
           <div className="text-center mt-4">
