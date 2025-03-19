@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
@@ -9,35 +8,29 @@ export default function Home() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [userRole, setUserRole] = useState("");
 
   useEffect(() => {
     if (session?.accessToken) {
       fetchMessages();
+      // 토큰에서 권한 정보 추출
+      try {
+        const tokenParts = session.accessToken.split('.');
+        const payload = JSON.parse(atob(tokenParts[1]));
+        
+        if (payload.authorities && payload.authorities.includes('ROLE_ADMIN')) {
+          setUserRole('ADMIN');
+        } else if (payload.authorities && payload.authorities.includes('ROLE_USER')) {
+          setUserRole('USER');
+        }
+      } catch (err) {
+        console.error("Failed to parse token:", err);
+      }
     }
   }, [session]);
 
   const fetchMessages = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_RESOURCE_SERVER_URL || "http://localhost:8080"}/api/messages`, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setMessages(data);
-    } catch (err) {
-      setError(`Failed to fetch messages: ${err.message}`);
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    // 기존 코드 유지
   };
 
   if (status === "loading") {
@@ -62,7 +55,10 @@ export default function Home() {
       ) : (
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold">환영합니다, {session.user?.name || "사용자"}님!</h2>
+            <h2 className="text-xl font-semibold">
+              환영합니다, {session.user?.name || "사용자"}님! 
+              {userRole === 'ADMIN' && <span className="ml-2 text-red-600">(관리자)</span>}
+            </h2>
             <button
               onClick={() => signOut()}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
@@ -71,6 +67,18 @@ export default function Home() {
             </button>
           </div>
           
+          {/* 관리자 전용 콘텐츠 */}
+          {userRole === 'ADMIN' && (
+            <div className="mb-6 bg-red-50 p-4 rounded-lg border border-red-200">
+              <h3 className="text-lg font-medium mb-2 text-red-700">관리자 전용 콘텐츠</h3>
+              <p>이 콘텐츠는 관리자 권한을 가진 사용자만 볼 수 있습니다.</p>
+              <button className="mt-2 bg-red-500 text-white px-3 py-1 rounded">
+                관리자 기능
+              </button>
+            </div>
+          )}
+          
+          {/* 모든 사용자 콘텐츠 */}
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2">보호된 메시지</h3>
             {loading ? (

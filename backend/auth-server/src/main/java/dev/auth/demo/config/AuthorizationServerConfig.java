@@ -10,12 +10,17 @@ import java.util.UUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
@@ -46,6 +51,8 @@ public class AuthorizationServerConfig {
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+            .authorizationEndpoint(authorizationEndpoint ->
+                authorizationEndpoint.consentPage("/oauth2/consent"))
             .oidc(Customizer.withDefaults());    // OpenID Connect 1.0 지원 활성화
         
         http
@@ -61,23 +68,42 @@ public class AuthorizationServerConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-            .authorizeHttpRequests((authorize) -> authorize
+            .csrf(csrf -> csrf.disable())  // 개발 중에만 임시로 비활성화
+            .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/oauth2/consent").authenticated()  // 인증된 사용자만 접근 가능
+                .requestMatchers("/login", "/error").permitAll()    // 로그인과 에러 페이지는 모두 접근 가능
                 .anyRequest().authenticated()
             )
-            .formLogin(Customizer.withDefaults());
+            .formLogin(formLogin -> formLogin
+                .loginPage("/login")
+                .permitAll()
+            );
         
         return http.build();
     }
 
     @Bean
     public UserDetailsService userDetailsService() {
-        UserDetails userDetails = User.withDefaultPasswordEncoder()
+        UserDetails adminUser = User.builder()
+            .username("admin")
+            .password("{noop}password")  // {noop} 접두사 추가
+            .roles("ADMIN", "USER")
+            .build();
+        
+        UserDetails normalUser = User.builder()
             .username("user")
-            .password("password")
+            .password("{noop}password")  // {noop} 접두사 추가
             .roles("USER")
             .build();
         
-        return new InMemoryUserDetailsManager(userDetails);
+        return new InMemoryUserDetailsManager(adminUser, normalUser);
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(UserDetailsService userDetailsService) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
+        return new ProviderManager(provider);
     }
 
     @Bean
@@ -139,5 +165,10 @@ public class AuthorizationServerConfig {
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
         return AuthorizationServerSettings.builder().issuer("http://localhost:9000").build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>권한 동의</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f7f7f7;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .scope-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        button, .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>권한 동의 요청</h1>
+        
+        <div class="form-group">
+            <p>
+                <span th:text="${clientName}"></span> 애플리케이션이 다음 권한에 대한 접근을 요청하고 있습니다:
+            </p>
+        </div>
+        
+        <form th:action="@{/oauth2/consent}" method="post">
+            <input type="hidden" name="client_id" th:value="${clientId}">
+            <input type="hidden" name="state" th:value="${state}">
+            <input type="hidden" name="redirect_uri" th:value="${redirectUri}">
+            
+            <div class="form-group">
+                <div th:each="scope : ${scopes}" class="scope-item">
+                    <input type="checkbox" th:id="${scope}" name="scope" th:value="${scope}" checked>
+                    <label th:for="${scope}">
+                        <strong th:text="${scope}"></strong>
+                        <span th:if="${scope == 'profile'}"> - 프로필 정보에 접근</span>
+                        <span th:if="${scope == 'openid'}"> - OpenID 표준 인증</span>
+                        <span th:if="${scope == 'message.read'}"> - 메시지 읽기</span>
+                        <span th:if="${scope == 'message.write'}"> - 메시지 쓰기</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button type="button" class="btn btn-secondary" onclick="window.location.href='/login?error=access_denied'">
+                    취소
+                </button>
+                <button type="submit" class="btn btn-primary">승인</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

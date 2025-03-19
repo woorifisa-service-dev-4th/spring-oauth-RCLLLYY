@@ -1,8 +1,7 @@
 // app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
+import type { NextAuthConfig } from "next-auth";
 import { JWT } from "next-auth/jwt";
-import { OAuthConfig } from "next-auth/providers";
-import { Profile } from "next-auth";
 
 interface Token extends JWT {
   accessToken?: string;
@@ -14,18 +13,17 @@ interface Token extends JWT {
 // 토큰의 만료 여부 확인
 const isTokenExpired = (token: Token) => {
   if (!token.accessTokenExpires) return true;
-  return Math.floor(Date.now() / 1000) >= token.accessTokenExpires;
+  return Math.floor(Date.now() / 1000) >= (token.accessTokenExpires - 10);
 };
 
 // 리프레시 토큰으로 액세스 토큰 갱신
 async function refreshAccessToken(token: Token) {
   try {
-    // Define token endpoint URL
+    if (!token.refreshToken) {
+      throw new Error("No refresh token available");
+    }
+
     const tokenEndpoint = `${process.env.OAUTH_ISSUER}/oauth2/token`;
-    
-    console.log(`Refreshing token at: ${tokenEndpoint}`);
-    
-    // Create authorization header
     const authHeader = Buffer.from(
       `${process.env.OAUTH_CLIENT_ID}:${process.env.OAUTH_CLIENT_SECRET}`
     ).toString("base64");
@@ -39,31 +37,20 @@ async function refreshAccessToken(token: Token) {
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: token.refreshToken as string,
+        refresh_token: token.refreshToken,
       }),
     });
-
-    // Check for non-JSON responses
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      const text = await response.text();
-      console.error(`Invalid response content-type: ${contentType}`);
-      console.error(`Response body: ${text.substring(0, 200)}`);
-      throw new Error(`Non-JSON response from OAuth server: ${text.substring(0, 100)}...`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to refresh token: ${response.status}`);
     }
 
     const data = await response.json();
-
-    if (!response.ok) {
-      console.error("OAuth server error response:", data);
-      throw new Error(`OAuth server returned ${response.status}: ${JSON.stringify(data)}`);
-    }
-
     return {
       ...token,
       accessToken: data.access_token,
       refreshToken: data.refresh_token ?? token.refreshToken,
-      accessTokenExpires: Math.floor(Date.now() / 1000) + data.expires_in,
+      accessTokenExpires: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
     };
   } catch (error) {
     console.error("RefreshAccessToken error", error);
@@ -74,7 +61,7 @@ async function refreshAccessToken(token: Token) {
   }
 }
 
-const handler = NextAuth({
+const config: NextAuthConfig = {
   providers: [
     {
       id: "oauth2",
@@ -90,59 +77,17 @@ const handler = NextAuth({
           response_type: "code",
         },
       },
-      token: {
-        url: `${process.env.OAUTH_ISSUER}/oauth2/token`,
-        async request({ client, params, checks, provider }) {
-          const response = await client.oauthCallback(
-            provider.callbackUrl,
-            params,
-            checks,
-            {
-              exchangeBody: {
-                client_id: process.env.OAUTH_CLIENT_ID,
-                client_secret: process.env.OAUTH_CLIENT_SECRET,
-              },
-              headers: {
-                Accept: "application/json",
-              },
-            }
-          );
-          return { tokens: response };
-        },
-      },
-      userinfo: {
-        url: `${process.env.OAUTH_ISSUER}/userinfo`,
-        async request({ tokens, provider }) {
-          try {
-            const res = await fetch(provider.userinfo?.url as string, {
-              headers: {
-                Authorization: `Bearer ${tokens.access_token}`,
-                Accept: "application/json",
-              },
-            });
-            
-            if (!res.ok) {
-              const errorText = await res.text();
-              console.error(`Userinfo error: ${res.status}`, errorText);
-              throw new Error(`Failed to fetch user info: ${res.status}`);
-            }
-            
-            return await res.json();
-          } catch (error) {
-            console.error("Error fetching user profile:", error);
-            throw error;
-          }
-        },
-      },
-      profile(profile: Profile) {
+      token: `${process.env.OAUTH_ISSUER}/oauth2/token`,
+      userinfo: `${process.env.OAUTH_ISSUER}/userinfo`,
+      profile(profile) {
         return {
           id: profile.sub,
-          name: profile.name,
+          name: profile.name || profile.sub,
           email: profile.email,
           image: profile.picture,
         };
       },
-    } as OAuthConfig<Profile>,
+    },
   ],
   callbacks: {
     async jwt({ token, account }) {
@@ -152,21 +97,32 @@ const handler = NextAuth({
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.accessTokenExpires = Math.floor(Date.now() / 1000) + (account.expires_in as number);
+        
+        // 토큰 디코딩하여 권한 정보 가져오기
+        try {
+          const tokenParts = account.access_token.split('.');
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          token.authorities = payload.authorities;
+        } catch (err) {
+          console.error("Failed to parse token:", err);
+        }
+        
         return token;
       }
-
+      
       // 토큰이 만료되지 않았으면 그대로 반환
-      if (!isTokenExpired(token)) {
+      if (!isTokenExpired(token as Token)) {
         return token;
       }
 
       console.log("Token expired, attempting refresh");
       // 토큰이 만료되었으면 리프레시
-      return refreshAccessToken(token);
+      return refreshAccessToken(token as Token);
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
       session.error = token.error;
+      session.authorities = token.authorities; // 권한 정보 세션에 추가
       return session;
     },
   },
@@ -174,7 +130,8 @@ const handler = NextAuth({
     signIn: "/auth/signin",
     error: "/auth/error",
   },
-  debug: true, // Always enable debug mode to see what's happening
-});
+  debug: process.env.NODE_ENV === "development",
+};
 
+const handler = NextAuth(config);
 export { handler as GET, handler as POST };
