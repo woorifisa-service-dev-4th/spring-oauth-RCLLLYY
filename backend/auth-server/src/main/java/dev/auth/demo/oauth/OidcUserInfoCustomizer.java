@@ -52,6 +52,12 @@ public class OidcUserInfoCustomizer implements OAuth2TokenCustomizer<JwtEncoding
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toSet());
                 
+                // ROLE_ADMIN을 가진 사용자에게 admin.access 스코프 추가
+                if (authorities.contains("ROLE_ADMIN")) {
+                    context.getClaims().claim("scope", 
+                        context.getClaims().build().getClaims().getOrDefault("scope", "") + " admin.access");
+                }
+                
                 context.getClaims().claim("authorities", authorities);
             }
         }

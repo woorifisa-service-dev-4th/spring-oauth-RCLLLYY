@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
+import router from "next/router";
 import { useEffect, useState } from "react";
 
 export default function Home() {
@@ -39,6 +40,18 @@ export default function Home() {
 
   return (
     <div className="container mx-auto p-6">
+      {userRole === 'ADMIN' && (
+        <div className="mb-6 bg-red-50 p-4 rounded-lg border border-red-200">
+          <h3 className="text-lg font-medium mb-2 text-red-700">관리자 기능</h3>
+          <p className="mb-2">관리자 권한이 있습니다. 아래 버튼을 클릭하여 관리자 기능에 접근할 수 있습니다.</p>
+          <button 
+            onClick={() => router.push("/admin")}
+            className="mt-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+          >
+            관리자 대시보드
+          </button>
+        </div>
+      )}      
       <h1 className="text-3xl font-bold mb-6">OAuth2 Demo</h1>
       
       {!session ? (

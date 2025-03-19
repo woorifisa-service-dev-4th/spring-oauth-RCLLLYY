@@ -106,10 +106,12 @@ public class AuthorizationServerConfig {
             .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
             // Register all possible redirect URIs
             .redirectUri("http://localhost:3000/api/auth/callback/oauth2")
+            .redirectUri("http://192.168.74.137:3000/api/auth/callback/oauth2")
             .redirectUri("http://127.0.0.1:3000/api/auth/callback/oauth2")
             .postLogoutRedirectUri("http://localhost:3000")
             .scope(OidcScopes.OPENID)
             .scope(OidcScopes.PROFILE)
+            .scope("admin.access")
             .scope("message.read")
             .scope("message.write")
             .clientSettings(ClientSettings.builder()
@@ -118,7 +120,7 @@ public class AuthorizationServerConfig {
             .tokenSettings(TokenSettings.builder()
                 .accessTokenTimeToLive(Duration.ofHours(1))
                 .refreshTokenTimeToLive(Duration.ofDays(30))
-                .reuseRefreshTokens(true)
+                .reuseRefreshTokens(false)
                 .build())
             .build();
         
