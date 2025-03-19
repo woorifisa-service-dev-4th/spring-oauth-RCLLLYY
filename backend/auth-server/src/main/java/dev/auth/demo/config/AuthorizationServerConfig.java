@@ -19,7 +19,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -51,8 +51,6 @@ public class AuthorizationServerConfig {
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-            .authorizationEndpoint(authorizationEndpoint ->
-                authorizationEndpoint.consentPage("/oauth2/consent"))
             .oidc(Customizer.withDefaults());    // OpenID Connect 1.0 지원 활성화
         
         http
@@ -68,35 +66,63 @@ public class AuthorizationServerConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())  // 개발 중에만 임시로 비활성화
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/oauth2/consent").authenticated()  // 인증된 사용자만 접근 가능
-                .requestMatchers("/login", "/error").permitAll()    // 로그인과 에러 페이지는 모두 접근 가능
+            .authorizeHttpRequests((authorize) -> authorize
                 .anyRequest().authenticated()
             )
-            .formLogin(formLogin -> formLogin
-                .loginPage("/login")
-                .permitAll()
-            );
+            .formLogin(Customizer.withDefaults());
         
         return http.build();
     }
 
     @Bean
     public UserDetailsService userDetailsService() {
-        UserDetails adminUser = User.builder()
-            .username("admin")
-            .password("{noop}password")  // {noop} 접두사 추가
-            .roles("ADMIN", "USER")
-            .build();
-        
-        UserDetails normalUser = User.builder()
+        UserDetails userDetails = User.withDefaultPasswordEncoder()
             .username("user")
-            .password("{noop}password")  // {noop} 접두사 추가
+            .password("password")
             .roles("USER")
             .build();
         
-        return new InMemoryUserDetailsManager(adminUser, normalUser);
+        // Add admin user for testing
+        UserDetails adminUser = User.withDefaultPasswordEncoder()
+            .username("admin")
+            .password("admin")
+            .roles("ADMIN", "USER")
+            .build();
+        
+        return new InMemoryUserDetailsManager(userDetails, adminUser);
+    }
+
+    @Bean
+    public RegisteredClientRepository registeredClientRepository() {
+        // IMPORTANT: Using "secret" without any encoding prefix
+        // This is the fix for the client_secret authentication issue
+        RegisteredClient nextjsClient = RegisteredClient.withId(UUID.randomUUID().toString())
+            .clientId("nextjs-client")
+            .clientSecret("secret")  // Without {noop} prefix
+            .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+            .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+            .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+            .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+            // Register all possible redirect URIs
+            .redirectUri("http://localhost:3000/api/auth/callback/oauth2")
+            .redirectUri("http://127.0.0.1:3000/api/auth/callback/oauth2")
+            .postLogoutRedirectUri("http://localhost:3000")
+            .scope(OidcScopes.OPENID)
+            .scope(OidcScopes.PROFILE)
+            .scope("message.read")
+            .scope("message.write")
+            .clientSettings(ClientSettings.builder()
+                .requireAuthorizationConsent(true)
+                .build())
+            .tokenSettings(TokenSettings.builder()
+                .accessTokenTimeToLive(Duration.ofHours(1))
+                .refreshTokenTimeToLive(Duration.ofDays(30))
+                .reuseRefreshTokens(true)
+                .build())
+            .build();
+        
+        return new InMemoryRegisteredClientRepository(nextjsClient);
     }
 
     @Bean
@@ -104,30 +130,6 @@ public class AuthorizationServerConfig {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userDetailsService);
         return new ProviderManager(provider);
-    }
-
-    @Bean
-    public RegisteredClientRepository registeredClientRepository() {
-        RegisteredClient nextjsClient = RegisteredClient.withId(UUID.randomUUID().toString())
-            .clientId("nextjs-client")
-            .clientSecret("{noop}secret")
-            .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-            .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-            .redirectUri("http://localhost:3000/api/auth/callback/oauth2")
-            .postLogoutRedirectUri("http://localhost:3000")
-            .scope(OidcScopes.OPENID)
-            .scope(OidcScopes.PROFILE)
-            .scope("message.read")
-            .scope("message.write")
-            .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
-            .tokenSettings(TokenSettings.builder()
-                .accessTokenTimeToLive(Duration.ofMinutes(30))
-                .refreshTokenTimeToLive(Duration.ofDays(7))
-                .build())
-            .build();
-        
-        return new InMemoryRegisteredClientRepository(nextjsClient);
     }
 
     @Bean
@@ -169,6 +171,6 @@ public class AuthorizationServerConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return NoOpPasswordEncoder.getInstance();
     }
 }
