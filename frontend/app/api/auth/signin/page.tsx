@@ -1,14 +1,29 @@
-// app/auth/signin/page.tsx
 "use client";
 
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 export default function SignIn() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  // const callbackUrl = searchParams.get("callbackUrl") || "/";
   const error = searchParams.get("error");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      await signIn("oauth2", { 
+        callbackUrl: "http://localhost:3000/api/auth/callback/oauth2",
+        redirect: true
+      });
+    } catch (err) {
+      console.error("로그인 오류:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -27,10 +42,11 @@ export default function SignIn() {
           </p>
           
           <button
-            onClick={() => signIn("oauth2", { callbackUrl })}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            onClick={handleSignIn}
+            disabled={isLoading}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            OAuth2 로그인
+            {isLoading ? "로그인 중..." : "OAuth2 로그인"}
           </button>
           
           <div className="text-center mt-4">

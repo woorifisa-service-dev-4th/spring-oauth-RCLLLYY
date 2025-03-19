@@ -1,67 +1,7 @@
-// app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
-import type { NextAuthConfig } from "next-auth";
-import { JWT } from "next-auth/jwt";
+import type { NextAuthOptions } from "next-auth";
 
-interface Token extends JWT {
-  accessToken?: string;
-  refreshToken?: string;
-  accessTokenExpires?: number;
-  error?: string;
-}
-
-// 토큰의 만료 여부 확인
-const isTokenExpired = (token: Token) => {
-  if (!token.accessTokenExpires) return true;
-  return Math.floor(Date.now() / 1000) >= (token.accessTokenExpires - 10);
-};
-
-// 리프레시 토큰으로 액세스 토큰 갱신
-async function refreshAccessToken(token: Token) {
-  try {
-    if (!token.refreshToken) {
-      throw new Error("No refresh token available");
-    }
-
-    const tokenEndpoint = `${process.env.OAUTH_ISSUER}/oauth2/token`;
-    const authHeader = Buffer.from(
-      `${process.env.OAUTH_CLIENT_ID}:${process.env.OAUTH_CLIENT_SECRET}`
-    ).toString("base64");
-    
-    const response = await fetch(tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${authHeader}`,
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: token.refreshToken,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to refresh token: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return {
-      ...token,
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token ?? token.refreshToken,
-      accessTokenExpires: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
-    };
-  } catch (error) {
-    console.error("RefreshAccessToken error", error);
-    return {
-      ...token,
-      error: "RefreshAccessTokenError",
-    };
-  }
-}
-
-const config: NextAuthConfig = {
+export const authOptions: NextAuthOptions = {
   providers: [
     {
       id: "oauth2",
@@ -69,69 +9,117 @@ const config: NextAuthConfig = {
       type: "oauth",
       clientId: process.env.OAUTH_CLIENT_ID,
       clientSecret: process.env.OAUTH_CLIENT_SECRET,
-      issuer: process.env.OAUTH_ISSUER,
       authorization: {
         url: `${process.env.OAUTH_ISSUER}/oauth2/authorize`,
-        params: {
+        params: { 
           scope: "openid profile message.read",
           response_type: "code",
+          redirect_uri: "http://localhost:3000/api/auth/callback/oauth2"  // 명시적으로 지정
+        }
+      },
+      token: {
+        url: `${process.env.OAUTH_ISSUER}/oauth2/token`,
+        params: {
+          redirect_uri: "http://localhost:3000/api/auth/callback/oauth2"  // 여기도 명시적으로 지정
+        },        
+        async request({ params, provider, client }) {
+          // HTTP Basic 인증 사용
+          const response = await fetch(provider.token?.url as string, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Authorization": `Basic ${Buffer.from(`${process.env.OAUTH_CLIENT_ID}:${process.env.OAUTH_CLIENT_SECRET}`).toString("base64")}`,
+            },
+            body: new URLSearchParams({
+              ...params,
+              grant_type: "authorization_code",
+              redirect_uri: "http://localhost:3000/api/auth/callback/oauth2"  // 명시적으로 추가
+            }),
+          });
+          
+          if (!response.ok) {
+            console.error(`토큰 교환 실패: ${response.status}`);
+            const errorData = await response.text();
+            console.error(`오류 세부정보: ${errorData}`);
+            throw new Error(`HTTP 오류! 상태: ${response.status}`);
+          }
+          
+          const tokens = await response.json();
+          return { tokens };
         },
       },
-      token: `${process.env.OAUTH_ISSUER}/oauth2/token`,
-      userinfo: `${process.env.OAUTH_ISSUER}/userinfo`,
+      userinfo: {
+        url: `${process.env.OAUTH_ISSUER}/userinfo`,
+      },
       profile(profile) {
         return {
           id: profile.sub,
-          name: profile.name || profile.sub,
+          name: profile.name || profile.preferred_username,
           email: profile.email,
-          image: profile.picture,
+          image: profile.picture
         };
-      },
-    },
+      }
+    }
   ],
   callbacks: {
     async jwt({ token, account }) {
-      // 최초 로그인 시 토큰 정보 저장
+      // 초기 로그인
       if (account) {
-        console.log("Initial sign-in, storing tokens");
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-        token.accessTokenExpires = Math.floor(Date.now() / 1000) + (account.expires_in as number);
-        
-        // 토큰 디코딩하여 권한 정보 가져오기
-        try {
-          const tokenParts = account.access_token.split('.');
-          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-          token.authorities = payload.authorities;
-        } catch (err) {
-          console.error("Failed to parse token:", err);
-        }
-        
+        return {
+          ...token,
+          accessToken: account.access_token,
+          refreshToken: account.refresh_token,
+          accessTokenExpires: account.expires_at ? account.expires_at * 1000 : 0,
+        };
+      }
+      
+      // 토큰이 아직 유효한 경우 그대로 반환
+      if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
         return token;
       }
       
-      // 토큰이 만료되지 않았으면 그대로 반환
-      if (!isTokenExpired(token as Token)) {
-        return token;
+      // 토큰이 만료되었으면 갱신 시도
+      try {
+        const response = await fetch(`${process.env.OAUTH_ISSUER}/oauth2/token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": `Basic ${Buffer.from(`${process.env.OAUTH_CLIENT_ID}:${process.env.OAUTH_CLIENT_SECRET}`).toString("base64")}`,
+          },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: token.refreshToken as string,
+          }),
+        });
+        
+        const tokens = await response.json();
+        
+        if (!response.ok) throw tokens;
+        
+        return {
+          ...token,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token ?? token.refreshToken,
+          accessTokenExpires: Date.now() + tokens.expires_in * 1000,
+        };
+      } catch (error) {
+        console.error("토큰 갱신 오류:", error);
+        return { ...token, error: "RefreshAccessTokenError" };
       }
-
-      console.log("Token expired, attempting refresh");
-      // 토큰이 만료되었으면 리프레시
-      return refreshAccessToken(token as Token);
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
       session.error = token.error;
-      session.authorities = token.authorities; // 권한 정보 세션에 추가
+      
       return session;
     },
   },
   pages: {
     signIn: "/auth/signin",
-    error: "/auth/error",
+    error: "/auth/error"
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: true,
 };
 
-const handler = NextAuth(config);
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };

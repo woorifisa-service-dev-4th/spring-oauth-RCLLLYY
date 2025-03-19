@@ -2,12 +2,28 @@
 
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 export default function SignIn() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const error = searchParams.get("error");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      await signIn("oauth2", { 
+        callbackUrl,
+        redirect: true
+      });
+    } catch (err) {
+      console.error("Sign-in error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -26,19 +42,11 @@ export default function SignIn() {
           </p>
           
           <button
-            onClick={() => {
-              console.log("Login attempt with oauth2 provider");
-              console.log("Using OAuth issuer:", process.env.NEXT_PUBLIC_OAUTH_ISSUER || "Not set");
-              signIn("oauth2", { 
-                redirect: true,
-                callbackUrl: window.location.origin 
-              }).catch(err => {
-                console.error("SignIn error:", err);
-              });
-            }}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+            onClick={handleSignIn}
+            disabled={isLoading}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            로그인
+            {isLoading ? "로그인 중..." : "OAuth2 로그인"}
           </button>
           
           <div className="text-center mt-4">
