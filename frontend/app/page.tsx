@@ -1,16 +1,16 @@
 "use client";
 
 import { useSession, signIn, signOut } from "next-auth/react";
-import router from "next/router";
 import { useEffect, useState } from "react";
-
+import { useRouter } from "next/navigation";
 export default function Home() {
   const { data: session, status } = useSession();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [userRole, setUserRole] = useState("");
-
+  const router = useRouter();
+  
   useEffect(() => {
     if (session?.accessToken) {
       fetchMessages();

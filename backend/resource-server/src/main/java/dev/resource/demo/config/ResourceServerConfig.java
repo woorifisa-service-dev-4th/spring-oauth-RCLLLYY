@@ -20,6 +20,7 @@ import java.util.Arrays;
 @EnableWebSecurity
 public class ResourceServerConfig {
 
+    @SuppressWarnings("removal")
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
