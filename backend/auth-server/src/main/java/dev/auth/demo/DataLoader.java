@@ -3,6 +3,7 @@ package dev.auth.demo;
 import dev.auth.demo.model.User;
 import dev.auth.demo.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -12,11 +13,11 @@ import java.util.Set;
 public class DataLoader implements CommandLineRunner {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
 
-    public DataLoader(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public DataLoader(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder) {
         this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
+        this.bCryptPasswordEncoder = bCryptPasswordEncoder;
     }
 
     @Override
@@ -24,30 +25,30 @@ public class DataLoader implements CommandLineRunner {
         if (userRepository.findByUsername("user").isEmpty()) {
             User user = new User();
             user.setUsername("user");
-            user.setPassword(passwordEncoder.encode("password"));
+            user.setPassword(bCryptPasswordEncoder.encode("password"));
             user.setEmail("user@test.com");
             user.setName("user");
-            user.setRoles(Set.of("ADMIN", "USER"));
+            user.setRoles(Set.of("USER"));
             userRepository.save(user);
         }
 
         if (userRepository.findByUsername("admin").isEmpty()) {
             User admin = new User();
             admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("password"));
+            admin.setPassword(bCryptPasswordEncoder.encode("password"));
             admin.setEmail("admin@test.com");
             admin.setName("admin");
-            admin.setRoles(Set.of("ADMIN", "USER"));
+            admin.setRoles(Set.of("ADMIN"));
             userRepository.save(admin);
         }
 
         if (userRepository.findByUsername("test").isEmpty()) {
             User test = new User();
             test.setUsername("test");
-            test.setPassword(passwordEncoder.encode("1234"));
+            test.setPassword(bCryptPasswordEncoder.encode("1234"));
             test.setEmail("test@test.com");
             test.setName("test");
-            test.setRoles(Set.of("ADMIN", "USER"));
+            test.setRoles(Set.of("USER"));
             userRepository.save(test);
         }
     }

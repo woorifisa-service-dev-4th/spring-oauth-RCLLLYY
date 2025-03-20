@@ -89,7 +89,7 @@ public class AuthorizationServerConfig {
         // This is the fix for the client_secret authentication issue
         RegisteredClient nextjsClient = RegisteredClient.withId(UUID.randomUUID().toString())
             .clientId("nextjs-client")
-            .clientSecret("secret")  // Without {noop} prefix
+            .clientSecret("$2a$12$KDapPx3O7J5EMREfutvKCOMxLxwLzVZpi1INmKuVALrMxOwZfVcXa")  // Without {noop} prefix
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
@@ -109,8 +109,8 @@ public class AuthorizationServerConfig {
                 .requireAuthorizationConsent(true)
                 .build())
             .tokenSettings(TokenSettings.builder()
-                .accessTokenTimeToLive(Duration.ofHours(1))
-                .refreshTokenTimeToLive(Duration.ofDays(30))
+                .accessTokenTimeToLive(Duration.ofSeconds(30))
+                .refreshTokenTimeToLive(Duration.ofSeconds(40))
                 .reuseRefreshTokens(false)
                 .build())
             .build();
@@ -164,7 +164,7 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public BCryptPasswordEncoder bCryptPasswordEncoder() {
         return new BCryptPasswordEncoder();
     }
 }
