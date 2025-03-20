@@ -13,14 +13,14 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.stereotype.Component;
 
 import dev.auth.demo.model.User;
-import dev.auth.demo.service.UserService;
+import dev.auth.demo.service.CustomUserDetailsService;
 
 @Component
 public class OidcUserInfoCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
-    private final UserService userService;
+    private final CustomUserDetailsService customUserDetailsService;
 
-    public OidcUserInfoCustomizer(@Lazy UserService userService) {
-        this.userService = userService;
+    public OidcUserInfoCustomizer(@Lazy CustomUserDetailsService customUserDetailsService) {
+        this.customUserDetailsService = customUserDetailsService;
     }
 
     @Override
@@ -28,36 +28,36 @@ public class OidcUserInfoCustomizer implements OAuth2TokenCustomizer<JwtEncoding
         // ID 토큰에 사용자 정보 추가
         if (context.getTokenType().getValue().equals("id_token")) {
             String username = context.getPrincipal().getName();
-            User user = userService.findByUsername(username);
-            
+            User user = (User) customUserDetailsService.loadUserByUsername(username);  // UserService 대신 CustomUserDetailsService 사용
+
             if (user != null) {
                 OidcUserInfo userInfo = OidcUserInfo.builder()
-                    .subject(username)
-                    .name(user.getName())
-                    .email(user.getEmail())
-                    .preferredUsername(user.getUsername())
-                    .build();
-                
-                context.getClaims().claims(claims -> 
-                    claims.putAll(userInfo.getClaims())
+                        .subject(username)
+                        .name(user.getName())
+                        .email(user.getEmail())
+                        .preferredUsername(user.getUsername())
+                        .build();
+
+                context.getClaims().claims(claims ->
+                        claims.putAll(userInfo.getClaims())
                 );
             }
         }
-        
+
         // 액세스 토큰에 권한 정보 추가
         if (context.getTokenType().getValue().equals("access_token")) {
             Authentication principal = context.getPrincipal();
             if (principal instanceof UsernamePasswordAuthenticationToken) {
                 Set<String> authorities = principal.getAuthorities().stream()
-                    .map(GrantedAuthority::getAuthority)
-                    .collect(Collectors.toSet());
-                
+                        .map(GrantedAuthority::getAuthority)
+                        .collect(Collectors.toSet());
+
                 // ROLE_ADMIN을 가진 사용자에게 admin.access 스코프 추가
                 if (authorities.contains("ROLE_ADMIN")) {
-                    context.getClaims().claim("scope", 
-                        context.getClaims().build().getClaims().getOrDefault("scope", "") + " admin.access");
+                    context.getClaims().claim("scope",
+                            context.getClaims().build().getClaims().getOrDefault("scope", "") + " admin.access");
                 }
-                
+
                 context.getClaims().claim("authorities", authorities);
             }
         }
