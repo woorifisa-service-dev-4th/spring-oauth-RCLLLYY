@@ -73,11 +73,28 @@ export default function Home() {
               {userRole === 'ADMIN' && <span className="ml-2 text-red-600">(관리자)</span>}
             </h2>
             <button
-              onClick={() => signOut()}
+              onClick={async () => {
+                try {
+                  const response = await fetch("/api/auth/logout", { method: "GET" });
+
+                  if (!response.ok) throw new Error("Logout failed");
+
+                  console.log("✅ 로그아웃 성공");
+
+                  // ✅ NextAuth 로그아웃
+                  await signOut({ redirect: false });
+
+                  // ✅ 로그인 페이지 이동
+                  window.location.href = "http://localhost:3000";
+                } catch (error) {
+                  console.error("🚨 로그아웃 실패:", error);
+                }
+              }}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
             >
               로그아웃
             </button>
+
           </div>
           
           {/* 관리자 전용 콘텐츠 */}
